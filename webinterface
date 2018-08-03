@@ -1,0 +1,180 @@
+=head1
+
+  test - module test
+
+=cut
+
+use strict;
+use warnings FATAL => 'all';
+use Data::Dumper;
+use Abills::Base qw(_bp);
+use Test::db::Test;
+our ($db, $admin, %info, %conf, %lang, $html);
+
+my $Test = Test::db::Test->new($db, $admin, \%conf);
+
+#**********************************************************
+=head2 test_sp_report($users_list) - Show all info about users with table and cards views
+
+  Arguments:
+   $users_list - Data from DB
+   
+  Returns:
+    true
+=cut
+#**********************************************************
+sub test_sp_report {
+  my $users_list = $Test->get_users();
+  my $test_form  = test_form();
+  my $table_info .= test_table();
+  my $test_content = test_cards_view($users_list, [ 
+      { id      => 'NUMBER' }, 
+      { email   => 'Email' }, 
+      { address => 'ADDRESS' } 
+    ]
+  );
+
+  $html->tpl_show(
+    _include('test_tabs', 'Test'),
+    {
+      CARD  => $test_content,
+      TABLE => $table_info
+    },
+  );
+  return 1;
+}
+#**********************************************************
+=head2 test_table() - Create tables with users info 
+
+  Arguments:
+
+  Returns:
+    $table->show({ OUTPUT2RETURN => 2 });
+
+=cut
+#**********************************************************
+sub test_table {
+
+  my $users_list = $Test->get_users(\%LIST_PARAMS);
+  my $table      = $html->table(
+    {
+      width   => '100%',
+      caption => $lang{USERS},
+      border  => 1,
+      title   => [ $lang{ID}, $lang{PIP}, $lang{EMAIL}, $lang{ADDRESS}, $lang{CELL} ],
+      pages   => $Test->{TOTAL},
+      qs      => $pages_qs,
+      ID      => 'COMPANY_ID',
+      MENU    => "$lang{ADD}:index=$index&add_form=1&$pages_qs:add",
+    }
+  );
+ 
+  foreach my $line (@$users_list) {
+    $table->addrow(
+      $line->{id}, 
+      $line->{pip}, 
+      $line->{email}, 
+      $line->{address}, 
+      $line->{cell}, 
+      $html->button($lang{CHANGE}, "index=$index&chg=$line->{id}", { class => 'change' }), 
+      $html->button($lang{DEL}, "index=$index&del=$line->{id}", { class => 'del', MESSAGE => 'Delete?' })
+    );
+  }
+
+  return $table->show({ OUTPUT2RETURN => 2 });
+}
+#**********************************************************
+=head2 test_form() - Add, change and delete users from DB
+
+  Arguments:
+     
+  Returns:
+    True
+
+=cut
+#**********************************************************
+sub test_form {
+  my $show_template = $FORM{add_form} || 0;
+  $Test->{ACTION}     = 'add';
+  $Test->{LNG_ACTION} = $lang{ADD};
+
+  if ($FORM{add}) {
+    $Test->user_add(\%FORM);
+    if (!$Test->{errno}) {
+      $html->message('info', $lang{INFO}, $lang{ADDED});
+    }
+  }
+  elsif ($FORM{change}) {
+    $Test->user_change({%FORM});
+    if (!$Test->{errno}) {
+      $html->message('info', $lang{INFO}, $lang{CHANGING});
+    }
+  }
+  elsif ($FORM{chg}) {
+    $Test->user_info($FORM{chg});
+    if (!$Test->{errno}) {
+      $html->message('info', $lang{INFO});
+    }
+    $Test->{ACTION}     = 'change';
+    $Test->{LNG_ACTION} = $lang{CHANGE};
+    $show_template      = 1;
+  }
+  elsif ($FORM{del} || $FORM{COMMENTS}) {
+    $Test->user_del($FORM{del});
+    if (!$Test->{errno}) {
+      $html->message('info', $lang{INFO}, $lang{DELETED});
+    }
+  }
+  if ($show_template) {
+    $html->tpl_show(_include('test_user_add', 'Test'), $Test);
+  }
+  return 1;
+}
+#**********************************************************
+=head2 form_window($list, $attr) - Create cards with users info
+
+  Arguments:
+    $list   - Data about users from DB
+    $attr   - Extra elements
+
+  Returns:
+    $user_line
+
+=cut
+#**********************************************************
+sub test_cards_view {
+  my ($list, $attr) = @_;
+  my $user_item = '';
+  my $user_line = '';
+
+  foreach my $item (@$list) {
+    foreach my $keys (@{$attr}) {
+      my ($key) = (keys %$keys);
+      $user_item .= $html->tpl_show(
+        _include('test_tag_p', 'Test'),
+        {
+          VALUE => $keys->{$key} . ': ' . $item->{$key}
+        },
+        { OUTPUT2RETURN => 1 }
+      );
+
+    }
+
+    $user_line .= $html->tpl_show(
+      _include('test_user_cards', 'Test'),
+      {
+        CONTENT => $user_item,
+        TRASH   => $html->button($lang{DEL}, "index=$index&del=$item->{id}", { class => 'del', MESSAGE => 'Delete?' }),
+        CHG => $html->button($lang{CHG}, "index=$index&chg=$item->{id}", { class => 'change' }),
+      },
+      { OUTPUT2RETURN => 2 }
+    );
+    $user_item = '';
+  }
+
+  return $user_line;
+}
+
+
+
+1;
